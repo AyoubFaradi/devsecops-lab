@@ -1,6 +1,11 @@
-FROM python:3.9
+FROM python:3.9-slim
+
 WORKDIR /app
-COPY ../api .
-RUN pip install flask
+
+COPY api/ /app/
+
+RUN pip install --no-cache-dir flask
+
 EXPOSE 5000
+
 CMD ["python", "app.py"]
