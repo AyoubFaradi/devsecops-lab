@@ -3,6 +3,7 @@ name: DevSecOps Pipeline
 on:
   push:
     branches: ["main"]
+  pull_request:
 
 permissions:
   contents: read
@@ -14,9 +15,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    # SAST - CodeQL
+    # ---------- Python deps ----------
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Cache pip
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: pip-${{ hashFiles('**/requirements.txt') }}
+
+    # ---------- SAST CodeQL ----------
     - name: Init CodeQL
       uses: github/codeql-action/init@v3
       with:
@@ -25,22 +39,33 @@ jobs:
     - name: Run CodeQL
       uses: github/codeql-action/analyze@v3
 
-    # Bandit
+    # ---------- Bandit ----------
     - name: Install Bandit
       run: pip install bandit
 
-    - name: Run Bandit
-      run: bandit -r api --severity-level high || true
+    - name: Run Bandit (High + Critical)
+      run: bandit -r api -ll
 
-    # Docker build
+    # ---------- Secret scanning ----------
+    - name: Gitleaks Scan
+      uses: gitleaks/gitleaks-action@v2
+
+    # ---------- Docker ----------
     - name: Build Docker image
-      run: docker build -t devsecops-api .
+      run: docker build -t devsecops-api:latest .
 
-    # Trivy
-    - name: Trivy Scan
+    # ----------  FS ----------
+    - name: Trivy Filesystem Scan
       uses: aquasecurity/trivy-action@master
       with:
-        scan-type: image
-        image-ref: devsecops-api
-        severity: CRITICAL,HIGH
-        exit-code: 0
+        scan-type: fs
+        severity: HIGH,CRITICAL
+        exit-code: 1
+
+    # ----------  Image ----------
+    - name: Trivy Image Scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: devsecops-api:latest
+        severity: HIGH,CRITICAL
+        exit-code: 1
